@@ -659,6 +659,7 @@ func (h *Handler) generateEmail(c *gin.Context) {
 		return
 	}
 	local := sanitizeLocal(input.Prefix)
+	explicitPrefix := local != ""
 	maxRetries := 10
 	if local == "" {
 		maxRetries = 10
@@ -678,7 +679,7 @@ func (h *Handler) generateEmail(c *gin.Context) {
 				fail(c, http.StatusInternalServerError, err.Error())
 				return
 			}
-			mailbox, link, err := h.createMailboxWithAccounting(ownerID, d, email, local, host, target.RequireWildcard, actor, shareDraft)
+			mailbox, link, err := h.createMailboxWithAccounting(ownerID, d, email, local, host, target.RequireWildcard, explicitPrefix, actor, shareDraft)
 			if err != nil {
 				if isUniqueConstraintError(err) {
 					attempt++
@@ -705,7 +706,7 @@ func (h *Handler) generateEmail(c *gin.Context) {
 			fail(c, http.StatusInternalServerError, err.Error())
 			return
 		}
-		if existing.OwnerID == ownerID && existing.DomainID == d.ID {
+		if canReuseGeneratedMailbox(existing, ownerID, d.ID, explicitPrefix) {
 			var link *models.ShareLink
 			var token string
 			var accessKey string
@@ -723,6 +724,15 @@ func (h *Handler) generateEmail(c *gin.Context) {
 			ok(c, h.generateEmailResponseWithShare(c, existing, d, true, link, token, accessKey))
 			return
 		}
+		if !explicitPrefix && existing.OwnerID == ownerID && existing.DomainID == d.ID && existing.RandomExcluded {
+			attempt++
+			if attempt >= maxRetries {
+				fail(c, http.StatusConflict, "could not find a random mailbox address; try again")
+				return
+			}
+			local = ""
+			continue
+		}
 		attempt++
 		if attempt >= maxRetries {
 			fail(c, http.StatusConflict, "邮箱地址已被占用，请更换前缀或先随机生成")
@@ -730,6 +740,10 @@ func (h *Handler) generateEmail(c *gin.Context) {
 		}
 		local = ""
 	}
+}
+
+func canReuseGeneratedMailbox(mailbox models.Mailbox, ownerID, domainID uint, explicitPrefix bool) bool {
+	return mailbox.OwnerID == ownerID && mailbox.DomainID == domainID && (explicitPrefix || !mailbox.RandomExcluded)
 }
 
 func (h *Handler) generateEmailTarget(input generateEmailRequest, actor *requestActor) (generateEmailTarget, error) {
@@ -934,14 +948,15 @@ func (h *Handler) generateEmailResponseWithShare(c *gin.Context, mailbox models.
 		addressType = generateEmailAddressTypeSubdomain
 	}
 	out := gin.H{
-		"email":        mailbox.Email,
-		"domain_id":    domain.ID,
-		"domain":       domain,
-		"local_part":   mailbox.LocalPart,
-		"host":         mailbox.Host,
-		"root_domain":  domain.Domain,
-		"address_type": addressType,
-		"subdomain":    subdomain,
+		"email":           mailbox.Email,
+		"domain_id":       domain.ID,
+		"domain":          domain,
+		"local_part":      mailbox.LocalPart,
+		"host":            mailbox.Host,
+		"root_domain":     domain.Domain,
+		"address_type":    addressType,
+		"subdomain":       subdomain,
+		"random_excluded": mailbox.RandomExcluded,
 	}
 	if subdomain != "" {
 		out["wildcard_pattern"] = "*." + domain.Domain
@@ -2436,7 +2451,7 @@ func (h *Handler) listMailboxes(c *gin.Context) {
 		}
 		query = query.Limit(perPage).Offset((page - 1) * perPage)
 	}
-	if err := query.Order("created_at desc").Find(&mailboxes).Error; err != nil {
+	if err := query.Order("pinned desc").Order("favorite desc").Order("created_at desc").Find(&mailboxes).Error; err != nil {
 		fail(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -2465,6 +2480,62 @@ func (h *Handler) listMailboxes(c *gin.Context) {
 		return
 	}
 	ok(c, out)
+}
+
+type patchMailboxRequest struct {
+	Pinned         *bool `json:"pinned"`
+	Favorite       *bool `json:"favorite"`
+	RandomExcluded *bool `json:"random_excluded"`
+}
+
+func (h *Handler) patchMailbox(c *gin.Context) {
+	actor, allowed := h.requireActor(c)
+	if !allowed {
+		return
+	}
+	ownerID, hasOwner := actor.ownerID()
+	if !hasOwner {
+		fail(c, http.StatusForbidden, "api key must be bound to an active user")
+		return
+	}
+	var input patchMailboxRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		fail(c, http.StatusBadRequest, "invalid json")
+		return
+	}
+	updates := map[string]any{}
+	if input.Pinned != nil {
+		updates["pinned"] = *input.Pinned
+	}
+	if input.Favorite != nil {
+		updates["favorite"] = *input.Favorite
+	}
+	if input.RandomExcluded != nil {
+		updates["random_excluded"] = *input.RandomExcluded
+	}
+	if len(updates) == 0 {
+		fail(c, http.StatusBadRequest, "at least one mailbox preference is required")
+		return
+	}
+	var mailbox models.Mailbox
+	if err := h.DB.Where("id = ? AND owner_id = ?", c.Param("id"), ownerID).First(&mailbox).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			fail(c, http.StatusNotFound, "mailbox not found")
+			return
+		}
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := h.DB.Model(&mailbox).Updates(updates).Error; err != nil {
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := h.DB.First(&mailbox, "id = ?", mailbox.ID).Error; err != nil {
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.audit("mailbox.preferences.update", actor.name(), mailbox.Email, "")
+	ok(c, mailbox)
 }
 
 type mailboxWithCount struct {
@@ -2577,7 +2648,7 @@ func (e httpStatusError) Error() string {
 	return e.Message
 }
 
-func (h *Handler) createMailboxWithAccounting(ownerID uint, d *models.Domain, email, local, host string, requireWildcard bool, actor *requestActor, share *pendingMailboxShare) (models.Mailbox, *models.ShareLink, error) {
+func (h *Handler) createMailboxWithAccounting(ownerID uint, d *models.Domain, email, local, host string, requireWildcard, randomExcluded bool, actor *requestActor, share *pendingMailboxShare) (models.Mailbox, *models.ShareLink, error) {
 	var mailbox models.Mailbox
 	var link *models.ShareLink
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
@@ -2601,11 +2672,12 @@ func (h *Handler) createMailboxWithAccounting(ownerID uint, d *models.Domain, em
 			}
 		}
 		mailbox = models.Mailbox{
-			OwnerID:   ownerID,
-			Email:     email,
-			LocalPart: local,
-			Host:      host,
-			DomainID:  freshDomain.ID,
+			OwnerID:        ownerID,
+			Email:          email,
+			LocalPart:      local,
+			Host:           host,
+			DomainID:       freshDomain.ID,
+			RandomExcluded: randomExcluded,
 		}
 		if err := tx.Create(&mailbox).Error; err != nil {
 			return err

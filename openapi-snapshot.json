@@ -918,7 +918,7 @@
           "API Key 自动化"
         ],
         "summary": "生成邮箱",
-        "description": "为 API Key 调用方创建或复用邮箱。默认生成普通邮箱 prefix@domain；设置 address_type=subdomain 可生成泛子域名邮箱 prefix@subdomain.domain，subdomain 留空时自动生成。传入 domain=*.example.com 会按父域 example.com 的泛子域名邮箱处理。设置 share=true 或 share.enabled=true 可在同一响应中创建邮箱分享；返回的 data.share.url 是分享页 URL，data.share.access_url 会在 URL fragment 中带上 #key=。",
+        "description": "为 API Key 调用方创建或复用邮箱。默认生成普通邮箱 prefix@domain；设置 address_type=subdomain 可生成泛子域名邮箱 prefix@subdomain.domain，subdomain 留空时自动生成。传入 domain=*.example.com 会按父域 example.com 的泛子域名邮箱处理。显式传入 prefix 创建的别名默认不会被无前缀随机生成请求复用，可通过 PATCH /api/mailboxes/{id} 调整。设置 share=true 或 share.enabled=true 可在同一响应中创建邮箱分享；返回的 data.share.url 是分享页 URL，data.share.access_url 会在 URL fragment 中带上 #key=。",
         "operationId": "generateEmail",
         "security": [
           {
@@ -1291,6 +1291,131 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EnvelopeMailboxDelete"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "资源已失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "请求过于频繁",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "服务器内部错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "x-hlool-auth": "X-API-Key"
+      },
+      "patch": {
+        "tags": [
+          "API Key 自动化"
+        ],
+        "summary": "更新邮箱偏好",
+        "description": "更新邮箱的置顶、收藏和随机生成排除状态。随机生成命中已排除邮箱时会跳过该地址。",
+        "operationId": "patchMailbox",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "邮箱 ID。",
+            "schema": {
+              "format": "uint64",
+              "type": "integer"
+            },
+            "example": 45
+          }
+        ],
+        "requestBody": {
+          "description": "要更新的邮箱偏好。",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchMailboxRequest"
+              },
+              "example": {
+                "favorite": true,
+                "pinned": true,
+                "random_excluded": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeMailbox"
                 }
               }
             }
@@ -4463,6 +4588,30 @@
         ],
         "type": "object"
       },
+      "EnvelopeMailbox": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Mailbox"
+          },
+          "error": {
+            "nullable": true,
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "error"
+        ],
+        "type": "object"
+      },
       "EnvelopeMailboxDelete": {
         "additionalProperties": false,
         "properties": {
@@ -4949,6 +5098,9 @@
           "local_part": {
             "type": "string"
           },
+          "random_excluded": {
+            "type": "boolean"
+          },
           "reuse": {
             "type": "boolean"
           },
@@ -5086,6 +5238,9 @@
             "format": "email",
             "type": "string"
           },
+          "favorite": {
+            "type": "boolean"
+          },
           "host": {
             "type": "string"
           },
@@ -5108,6 +5263,12 @@
             "format": "uint64",
             "type": "integer"
           },
+          "pinned": {
+            "type": "boolean"
+          },
+          "random_excluded": {
+            "type": "boolean"
+          },
           "updated_at": {
             "format": "date-time",
             "type": "string"
@@ -5120,6 +5281,9 @@
           "local_part",
           "host",
           "domain_id",
+          "pinned",
+          "favorite",
+          "random_excluded",
           "created_at",
           "updated_at"
         ],
@@ -5342,6 +5506,21 @@
           "has_email",
           "message"
         ],
+        "type": "object"
+      },
+      "PatchMailboxRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "favorite": {
+            "type": "boolean"
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "random_excluded": {
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "PatchShareLinkRequest": {
@@ -6208,6 +6387,15 @@
       "queryTemplate": "page=1\u0026per_page=20",
       "title": "邮箱列表",
       "description": "列出 API Key 拥有者创建的邮箱。"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/mailboxes/:id",
+      "auth": "apiKey",
+      "requestPath": "/api/mailboxes/45",
+      "bodyTemplate": "{\n  \"pinned\": true,\n  \"favorite\": true,\n  \"random_excluded\": true\n}",
+      "title": "更新邮箱偏好",
+      "description": "置顶或收藏邮箱，并控制它是否会被随机生成请求复用。"
     },
     {
       "method": "DELETE",

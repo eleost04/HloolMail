@@ -1,5 +1,5 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
-import { Inbox, Search, Trash2, X } from 'lucide-react';
+import { Inbox, Pin, Search, Shuffle, Star, Trash2, X } from 'lucide-react';
 import type { MailboxInfo } from '../../api';
 import { EmptyState, IconButton, PaginationControls } from '../../components/shared';
 import { formatCount } from './utils';
@@ -25,6 +25,8 @@ type MailboxListProps = {
   onPageChange: (page: number) => void;
   onSelectMailbox: (mailbox: MailboxInfo) => void;
   onDeleteMailbox?: (mailbox: MailboxInfo, row: HTMLElement | null) => void;
+  onUpdatePreferences?: (mailbox: MailboxInfo, preferences: Partial<Pick<MailboxInfo, 'pinned' | 'favorite' | 'random_excluded'>>) => void;
+  updatingMailboxId?: number | null;
   setConfirmingId?: Dispatch<SetStateAction<number | null>>;
 };
 
@@ -48,6 +50,8 @@ export function MailboxList({
   onPageChange,
   onSelectMailbox,
   onDeleteMailbox,
+  onUpdatePreferences,
+  updatingMailboxId,
   setConfirmingId
 }: MailboxListProps) {
   const showDeleteAction = Boolean(onDeleteMailbox && setConfirmingId);
@@ -90,6 +94,8 @@ export function MailboxList({
               confirming={showDeleteAction && confirmingId === mailbox.id}
               onSelect={() => onSelectMailbox(mailbox)}
               onDelete={showDeleteAction ? (row) => onDeleteMailbox?.(mailbox, row) : undefined}
+              onUpdatePreferences={onUpdatePreferences}
+              updating={updatingMailboxId === mailbox.id}
               setConfirmingId={setConfirmingId}
               showDeleteAction={showDeleteAction}
             />
@@ -129,6 +135,8 @@ type MailboxRowProps = {
   confirming: boolean;
   onSelect: () => void;
   onDelete?: (row: HTMLElement | null) => void;
+  onUpdatePreferences?: (mailbox: MailboxInfo, preferences: Partial<Pick<MailboxInfo, 'pinned' | 'favorite' | 'random_excluded'>>) => void;
+  updating?: boolean;
   setConfirmingId?: Dispatch<SetStateAction<number | null>>;
   showDeleteAction?: boolean;
 };
@@ -140,6 +148,8 @@ export function MailboxRow({
   confirming,
   onSelect,
   onDelete,
+  onUpdatePreferences,
+  updating = false,
   setConfirmingId,
   showDeleteAction = true
 }: MailboxRowProps) {
@@ -161,26 +171,67 @@ export function MailboxRow({
         <span className="min-w-0 flex-1 truncate font-medium">{mailbox.email}</span>
         <span className="badge shrink-0">{mailbox.message_count}</span>
       </button>
-      {showDeleteAction && onDelete && setConfirmingId && (
-        <button
-          type="button"
-          className={`mailbox-delete-btn ${confirming ? 'text-[var(--bad)]' : 'text-[var(--muted)] hover:text-[var(--bad)]'}`}
-          aria-label={confirming ? text.inbox.confirmDelete : text.inbox.deleteMailbox}
-          title={confirming ? `${text.inbox.confirmDelete} (3s)` : text.inbox.deleteMailbox}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (confirming) {
-              const row = (event.currentTarget as HTMLElement).closest('.mailbox-row') as HTMLElement | null;
-              setConfirmingId(null);
-              onDelete(row);
-            } else {
-              setConfirmingId(mailbox.id);
-              setTimeout(() => setConfirmingId((id) => id === mailbox.id ? null : id), 3000);
-            }
-          }}
-        >
-          {confirming ? <Trash2 size={14} /> : <X size={14} />}
-        </button>
+      {(onUpdatePreferences || (showDeleteAction && onDelete && setConfirmingId)) && (
+        <div className="mailbox-row-actions">
+          {onUpdatePreferences && (
+            <>
+              <IconButton
+                title={mailbox.pinned ? text.inbox.unpinMailbox : text.inbox.pinMailbox}
+                className={mailbox.pinned ? 'mailbox-preference-active' : ''}
+                disabled={updating}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onUpdatePreferences(mailbox, { pinned: !mailbox.pinned });
+                }}
+              >
+                <Pin size={15} fill={mailbox.pinned ? 'currentColor' : 'none'} />
+              </IconButton>
+              <IconButton
+                title={mailbox.favorite ? text.inbox.unfavoriteMailbox : text.inbox.favoriteMailbox}
+                className={mailbox.favorite ? 'mailbox-preference-active' : ''}
+                disabled={updating}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onUpdatePreferences(mailbox, { favorite: !mailbox.favorite });
+                }}
+              >
+                <Star size={15} fill={mailbox.favorite ? 'currentColor' : 'none'} />
+              </IconButton>
+              <IconButton
+                title={mailbox.random_excluded ? text.inbox.includeMailboxInRandom : text.inbox.excludeMailboxFromRandom}
+                className={mailbox.random_excluded ? 'mailbox-preference-active' : ''}
+                disabled={updating}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onUpdatePreferences(mailbox, { random_excluded: !mailbox.random_excluded });
+                }}
+              >
+                <Shuffle size={15} />
+              </IconButton>
+            </>
+          )}
+          {showDeleteAction && onDelete && setConfirmingId && (
+            <button
+              type="button"
+              className={`mailbox-delete-btn ${confirming ? 'text-[var(--bad)]' : 'text-[var(--muted)] hover:text-[var(--bad)]'}`}
+              aria-label={confirming ? text.inbox.confirmDelete : text.inbox.deleteMailbox}
+              title={confirming ? `${text.inbox.confirmDelete} (3s)` : text.inbox.deleteMailbox}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (confirming) {
+                  const row = (event.currentTarget as HTMLElement).closest('.mailbox-row') as HTMLElement | null;
+                  setConfirmingId(null);
+                  onDelete(row);
+                } else {
+                  setConfirmingId(mailbox.id);
+                  setTimeout(() => setConfirmingId((id) => id === mailbox.id ? null : id), 3000);
+                }
+              }}
+            >
+              {confirming ? <Trash2 size={14} /> : <X size={14} />}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

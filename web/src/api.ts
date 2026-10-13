@@ -336,6 +336,9 @@ export type MailboxInfo = {
   local_part: string;
   host: string;
   domain_id: number;
+  pinned: boolean;
+  favorite: boolean;
+  random_excluded: boolean;
   message_count: number;
   last_message_at?: string;
   created_at: string;

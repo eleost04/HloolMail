@@ -136,6 +136,7 @@ func Schemas() map[string]Schema {
 			"address_type":     stringSchema(""),
 			"subdomain":        stringSchema(""),
 			"wildcard_pattern": stringSchema(""),
+			"random_excluded":  boolSchema(),
 			"reuse":            boolSchema(),
 			"share":            schemaRef("GeneratedMailboxShare"),
 		}),
@@ -149,13 +150,16 @@ func Schemas() map[string]Schema {
 			"access_url":    stringSchema("uri"),
 			"expires_at":    stringSchema("date-time"),
 		}),
-		"Mailbox": objectSchema([]string{"id", "owner_id", "email", "local_part", "host", "domain_id", "created_at", "updated_at"}, map[string]any{
+		"Mailbox": objectSchema([]string{"id", "owner_id", "email", "local_part", "host", "domain_id", "pinned", "favorite", "random_excluded", "created_at", "updated_at"}, map[string]any{
 			"id":              integerSchema("uint64"),
 			"owner_id":        integerSchema("uint64"),
 			"email":           stringSchema("email"),
 			"local_part":      stringSchema(""),
 			"host":            stringSchema(""),
 			"domain_id":       integerSchema("uint64"),
+			"pinned":          boolSchema(),
+			"favorite":        boolSchema(),
+			"random_excluded": boolSchema(),
 			"message_count":   integerSchema("int64"),
 			"last_message_at": stringSchema("date-time"),
 			"created_at":      stringSchema("date-time"),
@@ -165,6 +169,11 @@ func Schemas() map[string]Schema {
 		"DeleteMailboxData": objectSchema([]string{"deleted", "messages_deleted"}, map[string]any{
 			"deleted":          boolSchema(),
 			"messages_deleted": integerSchema("int64"),
+		}),
+		"PatchMailboxRequest": objectSchema(nil, map[string]any{
+			"pinned":          boolSchema(),
+			"favorite":        boolSchema(),
+			"random_excluded": boolSchema(),
 		}),
 		"AttachmentMetadata": objectSchema([]string{"id", "sequence", "size_bytes"}, map[string]any{
 			"id":                stringSchema(""),
@@ -373,6 +382,7 @@ func EnvelopeSchemas() map[string]Schema {
 		"EnvelopeAvailableDomains":    "AvailableDomainsData",
 		"EnvelopeGenerateEmail":       "GenerateEmailData",
 		"EnvelopeMailboxPage":         "MailboxPage",
+		"EnvelopeMailbox":             "Mailbox",
 		"EnvelopeMailboxDelete":       "DeleteMailboxData",
 		"EnvelopeMessagePage":         "MessagePage",
 		"EnvelopeNextEmail":           "NextEmailData",

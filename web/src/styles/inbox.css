@@ -423,6 +423,24 @@
   transition: background-color 160ms ease, color 160ms ease;
 }
 
+.mailbox-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  margin-right: 0.2rem;
+}
+
+.mailbox-row-actions .icon-btn {
+  width: 2rem;
+  height: 2rem;
+  color: var(--muted);
+}
+
+.mailbox-row-actions .icon-btn:hover,
+.mailbox-row-actions .mailbox-preference-active {
+  color: var(--focus);
+}
+
 .mailbox-delete-btn:hover {
   background: color-mix(in srgb, var(--focus) 10%, transparent);
 }
@@ -1045,6 +1063,11 @@
   .mailbox-delete-btn {
     min-width: 2.5rem;
     margin-right: 0.15rem;
+  }
+
+  .mailbox-row-actions .icon-btn {
+    width: 2.5rem;
+    height: 2.5rem;
   }
 
   .verification-code-copy-compact {

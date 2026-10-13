@@ -159,7 +159,7 @@ export interface paths {
         put?: never;
         /**
          * 生成邮箱
-         * @description 为 API Key 调用方创建或复用邮箱。默认生成普通邮箱 prefix@domain；设置 address_type=subdomain 可生成泛子域名邮箱 prefix@subdomain.domain，subdomain 留空时自动生成。传入 domain=*.example.com 会按父域 example.com 的泛子域名邮箱处理。设置 share=true 或 share.enabled=true 可在同一响应中创建邮箱分享；返回的 data.share.url 是分享页 URL，data.share.access_url 会在 URL fragment 中带上 #key=。
+         * @description 为 API Key 调用方创建或复用邮箱。默认生成普通邮箱 prefix@domain；设置 address_type=subdomain 可生成泛子域名邮箱 prefix@subdomain.domain，subdomain 留空时自动生成。传入 domain=*.example.com 会按父域 example.com 的泛子域名邮箱处理。显式传入 prefix 创建的别名默认不会被无前缀随机生成请求复用，可通过 PATCH /api/mailboxes/{id} 调整。设置 share=true 或 share.enabled=true 可在同一响应中创建邮箱分享；返回的 data.share.url 是分享页 URL，data.share.access_url 会在 URL fragment 中带上 #key=。
          */
         post: operations["generateEmail"];
         delete?: never;
@@ -225,7 +225,11 @@ export interface paths {
         delete: operations["deleteMailbox"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * 更新邮箱偏好
+         * @description 更新邮箱的置顶、收藏和随机生成排除状态。随机生成命中已排除邮箱时会跳过该地址。
+         */
+        patch: operations["patchMailbox"];
         trace?: never;
     };
     "/api/openapi.json": {
@@ -746,6 +750,12 @@ export interface components {
             success: boolean;
             usage?: components["schemas"]["Usage"];
         };
+        EnvelopeMailbox: {
+            data: components["schemas"]["Mailbox"];
+            error: string | null;
+            success: boolean;
+            usage?: components["schemas"]["Usage"];
+        };
         EnvelopeMailboxDelete: {
             data: components["schemas"]["DeleteMailboxData"];
             error: string | null;
@@ -869,6 +879,7 @@ export interface components {
             email: string;
             host?: string;
             local_part?: string;
+            random_excluded?: boolean;
             reuse?: boolean;
             root_domain?: string;
             share?: components["schemas"]["GeneratedMailboxShare"];
@@ -913,6 +924,7 @@ export interface components {
             domain_id: number;
             /** Format: email */
             email: string;
+            favorite: boolean;
             host: string;
             /** Format: uint64 */
             id: number;
@@ -923,6 +935,8 @@ export interface components {
             message_count?: number;
             /** Format: uint64 */
             owner_id: number;
+            pinned: boolean;
+            random_excluded: boolean;
             /** Format: date-time */
             updated_at: string;
         };
@@ -992,6 +1006,11 @@ export interface components {
         NextEmailData: {
             has_email: boolean;
             message: components["schemas"]["MessageDetail"];
+        };
+        PatchMailboxRequest: {
+            favorite?: boolean;
+            pinned?: boolean;
+            random_excluded?: boolean;
         };
         PatchShareLinkRequest: {
             /** Format: date-time */
@@ -2282,6 +2301,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EnvelopeMailboxDelete"];
+                };
+            };
+            /** @description 请求参数错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description 无权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description 未找到 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description 资源已失效 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description 请求过于频繁 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description 服务器内部错误 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    patchMailbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description 邮箱 ID。
+                 * @example 45
+                 */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 要更新的邮箱偏好。 */
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "favorite": true,
+                 *       "pinned": true,
+                 *       "random_excluded": true
+                 *     }
+                 */
+                "application/json": components["schemas"]["PatchMailboxRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvelopeMailbox"];
                 };
             };
             /** @description 请求参数错误 */

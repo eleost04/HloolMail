@@ -210,7 +210,7 @@ var registry = []Operation{
 		Path:        "/api/generate-email",
 		Tags:        []string{TagAutomation},
 		Summary:     "生成邮箱",
-		Description: "为 API Key 调用方创建或复用邮箱。默认生成普通邮箱 prefix@domain；设置 address_type=subdomain 可生成泛子域名邮箱 prefix@subdomain.domain，subdomain 留空时自动生成。传入 domain=*.example.com 会按父域 example.com 的泛子域名邮箱处理。设置 share=true 或 share.enabled=true 可在同一响应中创建邮箱分享；返回的 data.share.url 是分享页 URL，data.share.access_url 会在 URL fragment 中带上 #key=。",
+		Description: "为 API Key 调用方创建或复用邮箱。默认生成普通邮箱 prefix@domain；设置 address_type=subdomain 可生成泛子域名邮箱 prefix@subdomain.domain，subdomain 留空时自动生成。传入 domain=*.example.com 会按父域 example.com 的泛子域名邮箱处理。显式传入 prefix 创建的别名默认不会被无前缀随机生成请求复用，可通过 PATCH /api/mailboxes/{id} 调整。设置 share=true 或 share.enabled=true 可在同一响应中创建邮箱分享；返回的 data.share.url 是分享页 URL，data.share.access_url 会在 URL fragment 中带上 #key=。",
 		Auth:        AuthAPIKey,
 		RequestBody: &RequestBody{Description: "可选的邮箱生成参数。", SchemaName: "GenerateEmailRequest", Example: "{\n  \"prefix\": \"verify\",\n  \"domain\": \"example.com\",\n  \"address_type\": \"root\",\n  \"share\": true\n}", Required: false},
 		Responses: []OperationResponse{
@@ -243,6 +243,24 @@ var registry = []Operation{
 			Description:   "列出 API Key 拥有者创建的邮箱。",
 			RequestPath:   "/api/mailboxes",
 			QueryTemplate: "page=1&per_page=20",
+		},
+	},
+	{
+		ID:          "patchMailbox",
+		Method:      http.MethodPatch,
+		Path:        "/api/mailboxes/{id}",
+		Tags:        []string{TagAutomation},
+		Summary:     "更新邮箱偏好",
+		Description: "更新邮箱的置顶、收藏和随机生成排除状态。随机生成命中已排除邮箱时会跳过该地址。",
+		Auth:        AuthAPIKey,
+		Parameters:  []Parameter{pathParam("id", "邮箱 ID。", integerSchema("uint64"), 45)},
+		RequestBody: &RequestBody{Description: "要更新的邮箱偏好。", SchemaName: "PatchMailboxRequest", Example: "{\n  \"pinned\": true,\n  \"favorite\": true,\n  \"random_excluded\": true\n}", Required: true},
+		Responses:   okResponses("EnvelopeMailbox"),
+		Frontend: &FrontendHints{
+			Title:        "更新邮箱偏好",
+			Description:  "置顶或收藏邮箱，并控制它是否会被随机生成请求复用。",
+			RequestPath:  "/api/mailboxes/45",
+			BodyTemplate: "{\n  \"pinned\": true,\n  \"favorite\": true,\n  \"random_excluded\": true\n}",
 		},
 	},
 	{

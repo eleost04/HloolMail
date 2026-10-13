@@ -71,6 +71,7 @@ These endpoints are allowed in the API-key automation OpenAPI group:
 | `POST` | `/api/generate-email` | Create or reuse a mailbox for the API-key actor. |
 | `GET` | `/api/mailboxes` | List generated mailboxes. |
 | `GET` | `/api/mailboxes/stats` | Read mailbox quota/usage stats visible to the actor. |
+| `PATCH` | `/api/mailboxes/:id` | Update pin, favorite, and random-generation exclusion preferences for one owned mailbox. |
 | `DELETE` | `/api/mailboxes/:id` | Delete one owned mailbox and its stored messages. |
 | `GET` | `/api/emails` | List messages for an authorized mailbox. |
 | `GET` | `/api/emails/next` | Poll the next unread message and mark it read. |

@@ -431,16 +431,19 @@ type EmailDelivery struct {
 }
 
 type Mailbox struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	OwnerID   uint      `gorm:"index;not null" json:"owner_id"`
-	Owner     User      `gorm:"foreignKey:OwnerID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
-	Email     string    `gorm:"uniqueIndex;size:320;not null" json:"email"`
-	LocalPart string    `gorm:"size:160;not null" json:"local_part"`
-	Host      string    `gorm:"index;size:255;not null" json:"host"`
-	DomainID  uint      `gorm:"index;not null" json:"domain_id"`
-	DomainRef Domain    `gorm:"foreignKey:DomainID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	OwnerID        uint      `gorm:"index;not null" json:"owner_id"`
+	Owner          User      `gorm:"foreignKey:OwnerID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	Email          string    `gorm:"uniqueIndex;size:320;not null" json:"email"`
+	LocalPart      string    `gorm:"size:160;not null" json:"local_part"`
+	Host           string    `gorm:"index;size:255;not null" json:"host"`
+	DomainID       uint      `gorm:"index;not null" json:"domain_id"`
+	DomainRef      Domain    `gorm:"foreignKey:DomainID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	Pinned         bool      `gorm:"not null;default:false" json:"pinned"`
+	Favorite       bool      `gorm:"not null;default:false" json:"favorite"`
+	RandomExcluded bool      `gorm:"not null;default:false" json:"random_excluded"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type APIUsageLog struct {

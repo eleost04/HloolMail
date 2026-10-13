@@ -1261,7 +1261,8 @@ func TestGenerateEmailUsesRootReadyForExplicitDomain(t *testing.T) {
 	}
 	var body struct {
 		Data struct {
-			Email string `json:"email"`
+			Email          string `json:"email"`
+			RandomExcluded bool   `json:"random_excluded"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(created.Body.Bytes(), &body); err != nil {
@@ -1269,6 +1270,9 @@ func TestGenerateEmailUsesRootReadyForExplicitDomain(t *testing.T) {
 	}
 	if body.Data.Email != "verify@root-ready-private.test" {
 		t.Fatalf("generated email = %q", body.Data.Email)
+	}
+	if !body.Data.RandomExcluded {
+		t.Fatal("an explicitly named mailbox should be excluded from random generation")
 	}
 
 	blocked := perform(router, http.MethodPost, "/api/generate-email", map[string]any{
@@ -2341,6 +2345,86 @@ func TestInboxPaginationAndMailboxSearch(t *testing.T) {
 	}
 	if len(legacyEmailBody.Data) != 2 {
 		t.Fatalf("legacy email list length = %d", len(legacyEmailBody.Data))
+	}
+}
+
+func TestMailboxPreferencesAreOwnerScopedAndSortPinnedFirst(t *testing.T) {
+	db := httpTestDB(t)
+	hash, err := auth.HashSecret("password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := models.User{Email: "preferences-owner@example.com", PasswordHash: hash, Role: models.UserRoleUser, Enabled: true, DailyLimit: 100}
+	other := models.User{Email: "preferences-other@example.com", PasswordHash: hash, Role: models.UserRoleUser, Enabled: true, DailyLimit: 100}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+	domain := models.Domain{Domain: "preferences.test", Mode: models.DomainModePublic, Active: true, MXVerified: true}
+	if err := db.Create(&domain).Error; err != nil {
+		t.Fatal(err)
+	}
+	mailboxes := []models.Mailbox{
+		{OwnerID: owner.ID, Email: "normal@preferences.test", LocalPart: "normal", Host: domain.Domain, DomainID: domain.ID},
+		{OwnerID: owner.ID, Email: "favorite@preferences.test", LocalPart: "favorite", Host: domain.Domain, DomainID: domain.ID, Favorite: true, RandomExcluded: true},
+		{OwnerID: other.ID, Email: "other@preferences.test", LocalPart: "other", Host: domain.Domain, DomainID: domain.ID},
+	}
+	if err := db.Create(&mailboxes).Error; err != nil {
+		t.Fatal(err)
+	}
+	_, apiKey, err := (auth.APIKeyService{DB: db}).CreateFor(&owner.ID, "mailbox-preferences", 20, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := testRouter(t, db)
+	headers := map[string]string{"X-API-Key": apiKey}
+	updated := perform(router, http.MethodPatch, "/api/mailboxes/"+strconv.Itoa(int(mailboxes[0].ID)), map[string]any{
+		"pinned":          true,
+		"favorite":        true,
+		"random_excluded": true,
+	}, headers)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("patch mailbox preferences = %d: %s", updated.Code, updated.Body.String())
+	}
+	var updatedBody struct {
+		Data models.Mailbox `json:"data"`
+	}
+	if err := json.Unmarshal(updated.Body.Bytes(), &updatedBody); err != nil {
+		t.Fatal(err)
+	}
+	if !updatedBody.Data.Pinned || !updatedBody.Data.Favorite || !updatedBody.Data.RandomExcluded {
+		t.Fatalf("mailbox preferences not returned: %+v", updatedBody.Data)
+	}
+	list := perform(router, http.MethodGet, "/api/mailboxes?page=1&per_page=10", nil, headers)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list mailboxes = %d: %s", list.Code, list.Body.String())
+	}
+	var listBody struct {
+		Data struct {
+			Items []models.Mailbox `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &listBody); err != nil {
+		t.Fatal(err)
+	}
+	if len(listBody.Data.Items) != 2 || listBody.Data.Items[0].Email != mailboxes[0].Email || listBody.Data.Items[1].Email != mailboxes[1].Email {
+		t.Fatalf("mailbox preference order or owner scope is wrong: %+v", listBody.Data.Items)
+	}
+	forbidden := perform(router, http.MethodPatch, "/api/mailboxes/"+strconv.Itoa(int(mailboxes[2].ID)), map[string]any{"pinned": true}, headers)
+	if forbidden.Code != http.StatusNotFound {
+		t.Fatalf("patch other owner's mailbox = %d, want 404: %s", forbidden.Code, forbidden.Body.String())
+	}
+}
+
+func TestRandomMailboxReuseSkipsExcludedAddresses(t *testing.T) {
+	mailbox := models.Mailbox{OwnerID: 10, DomainID: 20, RandomExcluded: true}
+	if canReuseGeneratedMailbox(mailbox, 10, 20, false) {
+		t.Fatal("random generation reused an excluded mailbox")
+	}
+	if !canReuseGeneratedMailbox(mailbox, 10, 20, true) {
+		t.Fatal("explicit prefix should still select its existing mailbox")
 	}
 }
 

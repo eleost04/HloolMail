@@ -230,7 +230,7 @@ func (h *Handler) yydsCreateAccountWithMode(c *gin.Context, wildcard bool) {
 				fail(c, http.StatusBadRequest, err.Error())
 				return
 			}
-			mailbox, _, err := h.createMailboxWithAccounting(ownerID, d, email, local, host, wildcard || subdomain != "", actor, nil)
+			mailbox, _, err := h.createMailboxWithAccounting(ownerID, d, email, local, host, wildcard || subdomain != "", emailLocal != "", actor, nil)
 			if err != nil {
 				if isUniqueConstraintError(err) && attempt+1 < maxRetries {
 					local = ""

@@ -4,7 +4,7 @@ import { useReducedMotion } from 'framer-motion';
 import { Check, Copy, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { MailboxInfo, ShareLinkDTO } from '../api';
-import { api, postJSON } from '../api';
+import { api, patchJSON, postJSON } from '../api';
 import { useText } from '../locales';
 import { useAppStore } from '../store';
 import { useCopyState } from '../hooks/useCopyState';
@@ -103,6 +103,17 @@ export function InboxPage() {
         setMailboxPage((page) => Math.max(1, page - 1));
       }
       notifySuccess(text.inbox.mailboxDeleted, { burst: false });
+    },
+    onError: (error) => toast.error(error.message)
+  });
+  const updateMailboxPreferences = useMutation({
+    mutationFn: ({ mailbox, preferences }: { mailbox: MailboxInfo; preferences: Partial<Pick<MailboxInfo, 'pinned' | 'favorite' | 'random_excluded'>> }) =>
+      patchJSON<MailboxInfo>(`/api/mailboxes/${mailbox.id}`, preferences, { apiKey }),
+    onSuccess: (_mailbox, { preferences }) => {
+      if (preferences.pinned !== undefined || preferences.favorite !== undefined) {
+        setMailboxPage(1);
+      }
+      return queryClient.invalidateQueries({ queryKey: ['mailboxes'] });
     },
     onError: (error) => toast.error(error.message)
   });
@@ -222,6 +233,8 @@ export function InboxPage() {
           onPageChange={setMailboxPage}
           onSelectMailbox={selectMailbox}
           onDeleteMailbox={handleDeleteMailbox}
+          onUpdatePreferences={(mailbox, preferences) => updateMailboxPreferences.mutate({ mailbox, preferences })}
+          updatingMailboxId={updateMailboxPreferences.isPending ? updateMailboxPreferences.variables?.mailbox.id : null}
           setConfirmingId={setConfirmingId}
         />
       </section>

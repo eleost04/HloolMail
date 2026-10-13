@@ -129,6 +129,7 @@ func NewRouter(h *Handler) *gin.Engine {
 	mailGroup.DELETE("/emails/clear", h.clearEmails)
 	mailGroup.GET("/mailboxes", h.listMailboxes)
 	mailGroup.GET("/mailboxes/stats", h.mailboxStats)
+	mailGroup.PATCH("/mailboxes/:id", h.patchMailbox)
 	mailGroup.DELETE("/mailboxes/:id", h.deleteMailbox)
 	api.GET("/inbox-stream", h.perAPIRateLimit(1.0/6, 3), h.inboxStream)
 
